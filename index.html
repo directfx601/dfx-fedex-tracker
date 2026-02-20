@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DFX Shipment Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --black:   #0a0a0a;
+    --white:   #f0ece0;
+    --dim:     #a09880;
+    --mid:     #4a4438;
+    --border:  #2e2a22;
+    --hover:   #1a1710;
+    --accent:  #f0ece0;
+    --scan:    rgba(240,236,224,0.03);
+    --mono:    'Share Tech Mono', 'Courier New', monospace;
+    --display: 'VT323', monospace;
+    --body:    'Courier Prime', 'Courier New', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: var(--black);
+    color: var(--white);
+    font-family: var(--body);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* CRT scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      var(--scan) 2px,
+      var(--scan) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* subtle vignette */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.6) 100%);
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    border-bottom: 2px solid var(--white);
+    padding: 16px 24px 12px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    position: relative;
+  }
+
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 0; right: 0;
+    height: 1px;
+    background: var(--dim);
+  }
+
+  .header-left { display: flex; flex-direction: column; gap: 2px; }
+
+  .header-title {
+    font-family: var(--display);
+    font-size: 42px;
+    line-height: 1;
+    letter-spacing: 3px;
+    color: var(--white);
+    text-shadow: 0 0 20px rgba(240,236,224,0.3);
+  }
+
+  .header-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 7px 14px;
+    border: 1px solid var(--white);
+    background: transparent;
+    color: var(--white);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .btn:hover { background: var(--white); color: var(--black); }
+  .btn:active { opacity: 0.7; }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn:disabled:hover { background: transparent; color: var(--white); }
+
+  .btn.inv { background: var(--white); color: var(--black); }
+  .btn.inv:hover { background: transparent; color: var(--white); }
+
+  .btn.loading .spin { display: inline-block; animation: spin 0.6s steps(8) infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── CONTROLS ── */
+  .controls {
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .search-wrap { position: relative; flex: 1; min-width: 180px; max-width: 360px; }
+  .search-prefix {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+    pointer-events: none;
+  }
+  .search-wrap input {
+    width: 100%;
+    padding: 7px 10px 7px 28px;
+    background: var(--black);
+    border: 1px solid var(--mid);
+    color: var(--white);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    transition: border-color 0.15s;
+    outline: none;
+  }
+  .search-wrap input:focus { border-color: var(--white); }
+  .search-wrap input::placeholder { color: var(--mid); }
+
+  .filter-group { display: flex; gap: 0; }
+  .filter-btn {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1px;
+    text-transform: uppercase; padding: 7px 12px;
+    border: 1px solid var(--mid); border-right: none;
+    background: transparent; color: var(--dim); cursor: pointer;
+    transition: all 0.1s;
+  }
+  .filter-btn:last-child { border-right: 1px solid var(--mid); }
+  .filter-btn:hover { border-color: var(--white); color: var(--white); z-index: 1; position: relative; }
+  .filter-btn.active { background: var(--white); color: var(--black); border-color: var(--white); z-index: 1; position: relative; }
+  .filter-btn.active + .filter-btn { border-left-color: var(--white); }
+
+  .last-loaded { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 1px; margin-left: auto; white-space: nowrap; }
+
+  /* ── STATS ── */
+  .stats-strip {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    overflow-x: auto;
+    display: none;
+  }
+
+  .stat {
+    padding: 10px 28px 10px 0;
+    margin-right: 28px;
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .stat:last-child { border-right: none; }
+  .stat .val {
+    font-family: var(--display);
+    font-size: 32px;
+    line-height: 1;
+    color: var(--white);
+    letter-spacing: 1px;
+  }
+  .stat .lbl {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  /* ── ROW COUNT ── */
+  .row-count {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 12px 24px 6px;
+  }
+
+  /* ── TABLE ── */
+  .table-wrap { padding: 0 24px 40px; overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 680px;
+    border: 1px solid var(--border);
+  }
+
+  thead tr {
+    border-bottom: 2px solid var(--white);
+  }
+
+  thead th {
+    padding: 8px 12px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--dim);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.1s;
+  }
+  thead th:hover { color: var(--white); }
+  thead th.sorted { color: var(--white); }
+  .sort-arrow { margin-left: 4px; opacity: 0.4; }
+  thead th.sorted .sort-arrow { opacity: 1; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.08s;
+  }
+  tbody tr:hover { background: var(--hover); }
+
+  tbody td {
+    padding: 9px 12px;
+    vertical-align: middle;
+    font-family: var(--body);
+    font-size: 13px;
+  }
+
+  .tracking-link {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--white);
+    text-decoration: none;
+    border-bottom: 1px solid var(--mid);
+    letter-spacing: 0.5px;
+    transition: border-color 0.1s;
+    white-space: nowrap;
+  }
+  .tracking-link:hover { border-color: var(--white); }
+  .tracking-link::after { content: ' ↗'; font-size: 9px; opacity: 0.5; }
+
+  .job-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--white);
+    border: 1px solid var(--mid);
+    padding: 1px 7px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+  .job-tag.empty { color: var(--mid); border-color: var(--border); }
+
+  .recipient-name { font-size: 13px; line-height: 1.3; }
+  .recipient-co { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-top: 2px; letter-spacing: 0.5px; }
+
+  .state-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+    letter-spacing: 1px;
+  }
+
+  .charge-val { font-family: var(--mono); font-size: 12px; }
+  .charge-zero { font-family: var(--mono); font-size: 11px; color: var(--mid); }
+
+  .date-val { font-family: var(--mono); font-size: 11px; color: var(--dim); white-space: nowrap; }
+
+  mark {
+    background: var(--white);
+    color: var(--black);
+    padding: 0 1px;
+  }
+
+  /* ── STATUS SCREENS ── */
+  .status-pane {
+    margin: 40px 24px;
+    border: 1px solid var(--border);
+    padding: 48px 32px;
+    text-align: center;
+  }
+
+  .status-pane .status-icon {
+    font-family: var(--display);
+    font-size: 48px;
+    color: var(--dim);
+    margin-bottom: 12px;
+    letter-spacing: 4px;
+  }
+
+  .status-pane h2 {
+    font-family: var(--display);
+    font-size: 28px;
+    letter-spacing: 3px;
+    margin-bottom: 10px;
+    color: var(--white);
+  }
+
+  .status-pane p {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+    line-height: 1.8;
+    max-width: 480px;
+    margin: 0 auto;
+    letter-spacing: 0.5px;
+  }
+
+  .status-pane code {
+    font-family: var(--mono);
+    color: var(--white);
+    border: 1px solid var(--mid);
+    padding: 1px 6px;
+    font-size: 11px;
+  }
+
+  .status-pane .retry-btn {
+    margin-top: 24px;
+  }
+
+  /* blinking cursor effect on loading */
+  .blink { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* staggered row entrance */
+  tbody tr {
+    animation: fadeRow 0.3s ease both;
+  }
+  @keyframes fadeRow {
+    from { opacity: 0; transform: translateX(-4px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="header-title">DFX SHIPMENT TRACKER</div>
+    <div class="header-sub">FedEx Label Export &mdash; <span id="headerStatus">Initializing<span class="blink">_</span></span></div>
+  </div>
+  <div class="header-right">
+    <a class="btn" id="fullListBtn" href="#" target="_blank" style="display:none">
+      &#x2197; Full List
+    </a>
+    <button class="btn" id="refreshBtn" onclick="fetchCSV()">
+      <span class="spin">&#x27F3;</span> Refresh
+    </button>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="search-wrap">
+    <span class="search-prefix">&gt;</span>
+    <input type="text" id="searchInput" placeholder="tracking #, job #, recipient, company..." oninput="applyFilters()">
+  </div>
+
+  <div class="filter-group" id="dateFilters">
+    <button class="filter-btn active" onclick="setDateFilter('all',this)">All</button>
+    <button class="filter-btn" onclick="setDateFilter('today',this)">Today</button>
+    <button class="filter-btn" onclick="setDateFilter('week',this)">Week</button>
+    <button class="filter-btn" onclick="setDateFilter('month',this)">Month</button>
+  </div>
+
+  <span class="last-loaded" id="lastLoaded"></span>
+</div>
+
+<div class="stats-strip" id="statsStrip">
+  <div class="stat"><div class="val" id="statTotal">0</div><div class="lbl">Labels</div></div>
+  <div class="stat"><div class="val" id="statJobs">0</div><div class="lbl">Jobs</div></div>
+  <div class="stat"><div class="val" id="statStates">0</div><div class="lbl">States</div></div>
+  <div class="stat"><div class="val" id="statCharge">$0</div><div class="lbl">Charges</div></div>
+  <div class="stat"><div class="val" id="statToday">0</div><div class="lbl">Today</div></div>
+</div>
+
+<div id="mainContent"></div>
+
+<script>
+  // ══════════════════════════════════════════════════════════════════════════
+  // CONFIGURATION
+  // These values match your SharePoint environment.
+  // Update if the site URL or file path ever changes.
+  // ══════════════════════════════════════════════════════════════════════════
+  const SP_HOST     = 'https://directfxsolutions.sharepoint.com';
+  const SP_SITE     = '/sites/DFXResources';
+  const SP_FILEPATH = '/Shared Documents/MS Fedex/MS_FedEx_Live_Export.csv';
+
+  // Full list URL — opens the SharePoint folder in a new tab
+  const FULL_LIST_URL = `${SP_HOST}${SP_SITE}/Shared%20Documents/MS%20Fedex/MS_FedEx_Live_Export.csv`;
+
+  // SharePoint REST API endpoint to download the file
+  const CSV_API_URL = `${SP_HOST}${SP_SITE}/_api/web/GetFileByServerRelativeUrl('${SP_SITE}${SP_FILEPATH}')/$value`;
+
+  const FEDEX_TRACK_URL = 'https://www.fedex.com/fedextrack/?trknbr=';
+  // ══════════════════════════════════════════════════════════════════════════
+
+  let allRows = [];
+  let sortCol = 'Date Created';
+  let sortDir = -1;
+  let activeDateFilter = 'all';
+
+  // Set up full list button
+  document.getElementById('fullListBtn').href = FULL_LIST_URL;
+  document.getElementById('fullListBtn').style.display = 'inline-flex';
+
+  window.addEventListener('DOMContentLoaded', fetchCSV);
+
+  // ── Fetch via SharePoint REST API ────────────────────────────────────────
+  async function fetchCSV() {
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+    setHeaderStatus('Loading<span class="blink">_</span>');
+    showLoading();
+
+    try {
+      const res = await fetch(CSV_API_URL, {
+        credentials: 'include',   // sends SharePoint session cookie
+        headers: { 'Accept': 'text/plain' }
+      });
+
+      if (res.status === 401 || res.status === 403) {
+        throw new Error('AUTH');
+      }
+      if (!res.ok) {
+        throw new Error(`HTTP_${res.status}`);
+      }
+
+      const text = await res.text();
+      allRows = parseCSV(text);
+      if (allRows.length === 0) throw new Error('EMPTY');
+
+      updateStats();
+      applyFilters();
+      document.getElementById('statsStrip').style.display = 'flex';
+
+      const t = new Date();
+      document.getElementById('lastLoaded').textContent =
+        'SYNCED ' + t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setHeaderStatus('Live &mdash; ' + allRows.length + ' records');
+
+    } catch (err) {
+      showError(err.message);
+      setHeaderStatus('Error');
+    } finally {
+      btn.classList.remove('loading');
+      btn.disabled = false;
+    }
+  }
+
+  function setHeaderStatus(html) {
+    document.getElementById('headerStatus').innerHTML = html;
+  }
+
+  // ── Parse CSV ────────────────────────────────────────────────────────────
+  function parseCSV(text) {
+    text = text.replace(/^\uFEFF/, '');
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim());
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const vals = splitCSVLine(lines[i]);
+      const row = {};
+      headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim(); });
+      const raw = row['Tracking Number'] || '';
+      row['Tracking Number'] = raw.replace(/^['*]+/, '').trim();
+      if (!row['Tracking Number'] || /E\+/i.test(row['Tracking Number'])) continue;
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  function splitCSVLine(line) {
+    const r = []; let cur = '', inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { r.push(cur); cur = ''; }
+      else { cur += ch; }
+    }
+    r.push(cur);
+    return r;
+  }
+
+  // ── Stats ────────────────────────────────────────────────────────────────
+  function updateStats() {
+    const today   = fmtDate(new Date());
+    const jobs    = new Set(allRows.map(r => r['Customer Reference Number']).filter(Boolean));
+    const states  = new Set(allRows.map(r => r['State']).filter(Boolean));
+    const charge  = allRows.reduce((s, r) => s + (parseFloat(r['Net Charge']) || 0), 0);
+    const todayCt = allRows.filter(r => r['Date Created'] === today).length;
+
+    document.getElementById('statTotal').textContent  = allRows.length;
+    document.getElementById('statJobs').textContent   = jobs.size;
+    document.getElementById('statStates').textContent = states.size;
+    document.getElementById('statCharge').textContent = '$' + charge.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    document.getElementById('statToday').textContent  = todayCt;
+  }
+
+  // ── Date helpers ─────────────────────────────────────────────────────────
+  function fmtDate(d) { return (d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear(); }
+  function parseDate(s) {
+    if (!s) return null;
+    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    return m ? new Date(+m[3], +m[1]-1, +m[2]) : null;
+  }
+
+  // ── Filters ──────────────────────────────────────────────────────────────
+  function setDateFilter(val, btn) {
+    activeDateFilter = val;
+    document.querySelectorAll('#dateFilters .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const q   = document.getElementById('searchInput').value.toLowerCase().trim();
+    const now = new Date();
+    const sow = new Date(now); sow.setDate(now.getDate() - now.getDay());
+    const som = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    let filtered = allRows.filter(r => {
+      if (activeDateFilter !== 'all') {
+        const d = parseDate(r['Date Created']);
+        if (!d) return false;
+        if (activeDateFilter === 'today' && fmtDate(d) !== fmtDate(now)) return false;
+        if (activeDateFilter === 'week'  && d < sow) return false;
+        if (activeDateFilter === 'month' && d < som) return false;
+      }
+      if (q) {
+        const hay = [
+          r['Tracking Number'], r['Customer Reference Number'], r['PO Number'],
+          r['Recipient Contact'], r['Recipient Company'], r['State'], r['Date Created']
+        ].join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    filtered.sort((a, b) => {
+      const va = a[sortCol]||'', vb = b[sortCol]||'';
+      if (sortCol === 'Date Created') return sortDir * ((parseDate(va)||0) - (parseDate(vb)||0));
+      if (sortCol === 'Net Charge')   return sortDir * ((parseFloat(va)||0) - (parseFloat(vb)||0));
+      return sortDir * va.localeCompare(vb);
+    });
+
+    renderTable(filtered, q);
+  }
+
+  function setSort(col) {
+    sortDir = (sortCol === col) ? sortDir * -1 : -1;
+    sortCol = col;
+    applyFilters();
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  function hl(text, q) {
+    if (!q || !text) return escHtml(text || '');
+    const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return escHtml(text).replace(new RegExp(`(${esc})`, 'gi'), '<mark>$1</mark>');
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function renderTable(rows, q) {
+    const container = document.getElementById('mainContent');
+
+    if (!rows.length) {
+      container.innerHTML = `
+        <div class="status-pane">
+          <div class="status-icon">[ 0 ]</div>
+          <h2>NO RESULTS</h2>
+          <p>No shipments match the current filter.<br>Try adjusting your search or date range.</p>
+        </div>`;
+      return;
+    }
+
+    const cols = [
+      { key: 'Date Created',              label: 'Date'      },
+      { key: 'Tracking Number',           label: 'Tracking'  },
+      { key: 'Customer Reference Number', label: 'Job #'     },
+      { key: 'Recipient Contact',         label: 'Recipient' },
+      { key: 'State',                     label: 'ST'        },
+      { key: 'Net Charge',                label: 'Charge'    },
+    ];
+
+    const arrow = col => sortCol !== col
+      ? '<span class="sort-arrow">&#x2195;</span>'
+      : `<span class="sort-arrow">${sortDir===-1?'&#x2193;':'&#x2191;'}</span>`;
+
+    const thead = `<thead><tr>${cols.map(c =>
+      `<th class="${sortCol===c.key?'sorted':''}" onclick="setSort('${c.key}')">${c.label}${arrow(c.key)}</th>`
+    ).join('')}</tr></thead>`;
+
+    const tbody = rows.map((r, i) => {
+      const trk    = r['Tracking Number'];
+      const job    = r['Customer Reference Number'] || '';
+      const name   = r['Recipient Contact'] || '';
+      const co     = r['Recipient Company'] || '';
+      const state  = r['State'] || '';
+      const charge = parseFloat(r['Net Charge']) || 0;
+      const date   = r['Date Created'] || '';
+      const delay  = Math.min(i * 0.02, 0.4);
+
+      return `<tr style="animation-delay:${delay}s">
+        <td class="date-val">${escHtml(date)}</td>
+        <td>${trk
+          ? `<a class="tracking-link" href="${FEDEX_TRACK_URL}${encodeURIComponent(trk)}" target="_blank" rel="noopener">${hl(trk,q)}</a>`
+          : '<span class="charge-zero">—</span>'}</td>
+        <td>${job
+          ? `<span class="job-tag">${hl(job,q)}</span>`
+          : '<span class="job-tag empty">—</span>'}</td>
+        <td>
+          <div class="recipient-name">${hl(name,q)}</div>
+          ${co ? `<div class="recipient-co">${hl(co,q)}</div>` : ''}
+        </td>
+        <td><span class="state-tag">${hl(state,q)}</span></td>
+        <td>${charge > 0
+          ? `<span class="charge-val">$${charge.toFixed(2)}</span>`
+          : '<span class="charge-zero">—</span>'}</td>
+      </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+      <div class="row-count">// ${rows.length} shipment${rows.length!==1?'s':''} found</div>
+      <div class="table-wrap"><table>${thead}<tbody>${tbody}</tbody></table></div>`;
+  }
+
+  // ── Status screens ───────────────────────────────────────────────────────
+  function showLoading() {
+    document.getElementById('mainContent').innerHTML = `
+      <div class="status-pane">
+        <div class="status-icon">[ ... ]</div>
+        <h2>LOADING</h2>
+        <p>Connecting to SharePoint<span class="blink">_</span></p>
+      </div>`;
+  }
+
+  function showError(code) {
+    const msgs = {
+      AUTH:    'Authentication required.<br>Please make sure you are signed in to SharePoint and reload this page.',
+      EMPTY:   'The CSV file was found but contained no valid shipment records.',
+    };
+    const msg = msgs[code] || `Could not retrieve the CSV file (${code}).<br>
+      Verify that <code>${SP_FILEPATH}</code> exists in the document library<br>
+      and that this page is being served from a domain that SharePoint trusts.`;
+
+    document.getElementById('statsStrip').style.display = 'none';
+    document.getElementById('mainContent').innerHTML = `
+      <div class="status-pane">
+        <div class="status-icon">[ ! ]</div>
+        <h2>LOAD ERROR</h2>
+        <p>${msg}</p>
+        <button class="btn retry-btn" onclick="fetchCSV()" style="margin-top:24px">&#x27F3; Retry</button>
+      </div>`;
+  }
+</script>
+</body>
+</html>
